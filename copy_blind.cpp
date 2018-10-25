@@ -275,7 +275,6 @@ void Blind::on_rtn_order(const LFRtnOrderField* data, int request_id, short sour
 
 int main(int argc, const char* argv[])
 {
-    WizardUtil wizardUtil;
     double lossRate = 0.007;
     double times = 4;
     if(argc >= 3){
@@ -284,15 +283,9 @@ int main(int argc, const char* argv[])
         std::istringstream iss2(argv[2]);
         iss2>>times;
     }
-    LFMarketDataField* md = new LFMarketDataField();
-    strcpy(md->UpdateTime, "07:54:45");
-
-    std::cout<<wizardUtil.tickValidate(md)<<std::endl;
-    /*
     Blind str(string("copy_blind"), lossRate, times);
     str.init();
     str.start();
     str.block();
-    */
     return 0;
 }
