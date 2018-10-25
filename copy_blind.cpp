@@ -11,6 +11,7 @@
 #include <set>
 #include <iostream>
 #include "time.h"
+#include "WizardUtil.h"
 
 USING_WC_NAMESPACE
 
@@ -25,6 +26,7 @@ protected:
     Plan* plan;
     std::set<int> doingOrders;
     double impossiablePrice = 1e100;
+    WizardUtil wizardUtil;
 public:
     virtual void init();
     virtual void on_market_data(const LFMarketDataField* data, short source, long rcv_time);
@@ -91,9 +93,13 @@ void Blind::on_rsp_position(const PosHandlerPtr posMap, int request_id, short so
 
 void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_time) {
     if (td_connected) {
-        if(md->AskPrice1 > impossiablePrice || md->BidPrice1 > impossiablePrice || md->OpenPrice > impossiablePrice ){
-            KF_LOG_INFO(logger, "impossiable tick, ignored");
-        }else {
+        if(md->AskPrice1 > impossiablePrice ||
+        md->BidPrice1 > impossiablePrice ||
+        md->OpenPrice > impossiablePrice){
+            KF_LOG_INFO(logger, "impossiable tick price, ignored");
+        } else if( ! wizardUtil.tickValidate(md)){
+            KF_LOG_INFO(logger, "impossiable tick time, ignored");
+        } else {
             if (strcmp(M_TICKER, md->InstrumentID) == 0) { // maybe many kinds
                 if (doingOrders.size() > 0) { // some order is itill doing
                     KF_LOG_INFO(logger, "[on tick] some order is still doing");
@@ -268,6 +274,7 @@ void Blind::on_rtn_order(const LFRtnOrderField* data, int request_id, short sour
 
 int main(int argc, const char* argv[])
 {
+    WizardUtil wizardUtil;
     double lossRate = 0.007;
     double times = 4;
     if(argc >= 3){
@@ -276,9 +283,15 @@ int main(int argc, const char* argv[])
         std::istringstream iss2(argv[2]);
         iss2>>times;
     }
+    LFMarketDataField* md = new LFMarketDataField();
+    strcpy(md->UpdateTime, "07:54:45");
+
+    std::cout<<wizardUtil.tickValidate(md)<<std::endl;
+    /*
     Blind str(string("copy_blind"), lossRate, times);
     str.init();
     str.start();
     str.block();
+    */
     return 0;
 }
