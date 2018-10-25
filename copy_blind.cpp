@@ -237,25 +237,26 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
         }else{
             KF_LOG_FATAL(logger, "[TRADE] direction " << rtn_trade->OffsetFlag << " complete, dont know what to do");
         }
+        // consider every kind of close
     }else if(rtn_trade->OffsetFlag == LF_CHAR_CloseYesterday ||
     rtn_trade->OffsetFlag == LF_CHAR_CloseToday ||
-    rtn_trade->OffsetFlag == LF_CHAR_Close){ // every kind of close
-        if(rtn_trade->Direction == LF_CHAR_Buy){
+    rtn_trade->OffsetFlag == LF_CHAR_Close){
+        if(rtn_trade->Direction == LF_CHAR_Buy){ // buy close, add buy
             KF_LOG_INFO(logger, "[blind] over trade, add sell");
             double sum = 0;
             for(std::vector<double>::iterator p = plan->inPrices.begin(); p != plan->inPrices.end(); p++){
                 sum += rtn_trade->Price - *p;
             }
             KF_LOG_INFO(logger, "[blind] " << plan->inPrices.size() << " -> " << rtn_trade->Price << " ==>" << sum);
-            plan->resetAsSell();
-        }else if(rtn_trade->Direction == LF_CHAR_Sell){
+            plan->resetAsBuy();
+        }else if(rtn_trade->Direction == LF_CHAR_Sell){ // sell close, add sell
             KF_LOG_INFO(logger, "[blind] over trade, add buy");
             double sum = 0;
             for(std::vector<double>::iterator p = plan->inPrices.begin(); p != plan->inPrices.end(); p++){
                 sum += *p - rtn_trade->Price;
             }
             KF_LOG_INFO(logger, "[blind] " << plan->inPrices.size() << " -> " << rtn_trade->Price << " ==>" << sum);
-            plan->resetAsBuy();
+            plan->resetAsSell();
         }
     } else {
         KF_LOG_FATAL(logger, "[TRADE] Offset " << rtn_trade->OffsetFlag << " complete, dont know what to do");
