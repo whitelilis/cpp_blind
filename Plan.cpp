@@ -27,21 +27,3 @@ void Plan::resetAsSell() {
     todayVolume = 0;
     yesterdayVolume = 0;
 }
-
-void Plan::save() {
-    char_64 path;
-    sprintf(path, "%s/%s.ser", "/tmp/", name);
-    std::ofstream fout(path);
-    boost::archive::text_oarchive oa(fout);
-    oa<<*this;
-    fout.close();
-}
-
-void Plan::load() {
-    char_64 path;
-    sprintf(path, "%s/%s.ser", "/tmp/", name);
-    std::ifstream fin(path);
-    boost::archive::text_iarchive ia(fin);
-    ia>>*this;
-    fin.close();
-}

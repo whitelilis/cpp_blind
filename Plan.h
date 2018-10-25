@@ -16,30 +16,10 @@
 
 class Plan {
 
-private:
-    friend class boost::serialization::access;
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version)
-    {
-        //ar & name;
-        ar & useMin;
-        ar & useMax;
-        ar & todayVolume;
-        ar & yesterdayVolume;
-        ar & lastInDate;
-        ar & lossRate;
-        ar & profitRate;
-        ar & inPrice;
-        ar & outPrice;
-        ar & direction;
-        //ar & inPrices;
-    }
 public:
     Plan(char_64 name, double lossRate, double profitRate);
     void resetAsBuy();
     void resetAsSell();
-    void save();
-    void load();
 
 
     static constexpr double useMin = 0.88;

@@ -24,6 +24,7 @@ protected:
     bool td_connected;
     Plan* plan;
     std::set<int> doingOrders;
+    double impossiablePrice = 1e100;
 public:
     virtual void init();
     virtual void on_market_data(const LFMarketDataField* data, short source, long rcv_time);
@@ -49,8 +50,7 @@ Blind::Blind(const string& name, double lossRate, double times): IWCStrategy(nam
     double profitRate = lossRate * times;
     // todo : reload saved
     KF_LOG_INFO(logger, "rand :"<< r << " lossRate: " << lossRate << " times: " << times);
-    char_64 planName;
-    sprintf(planName, "blind_%s_%s_%s", SOURCE_INDEX, M_EXCHANGE, M_TICKER);
+    char_64 planName = "needAName";
     plan = new Plan(planName, lossRate, profitRate);
     if(r % 2 == 0){
         plan->resetAsBuy();
@@ -68,7 +68,7 @@ void Blind::init()
     util->subscribeMarketData(tickers, SOURCE_INDEX);
     // necessary initialization of internal fields.
     td_connected = false;
-    BLCallback bl = boost::bind(callback_func_blind, this, 999);
+    BLCallback bl = boost::bind(callback_func_blind, this, 998);
     util->insert_callback(kungfu::yijinjing::getNanoTime() + 2* 1e9, bl);
 }
 
@@ -91,99 +91,114 @@ void Blind::on_rsp_position(const PosHandlerPtr posMap, int request_id, short so
 
 void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_time) {
     if (td_connected) {
-        KF_LOG_INFO(logger, "[debug tick] " << M_TICKER << " " << SOURCE_INDEX << " " << md->LastPrice );
-        if (strcmp(M_TICKER, md->InstrumentID) == 0) { // maybe many kinds
-            if (doingOrders.size() > 0) { // some order is itill doing
-                KF_LOG_INFO(logger, "[on tick] some order is still doing");
-                return;
-            }else{
-                if(plan->direction == LONG_IN){
-                    if(md->LastPrice > plan->inPrice) {
-                        KF_LOG_INFO(logger, "will long in " << md->LastPrice << " @ " << md->UpdateTime);
-                        int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                           md->UpperLimitPrice, 1,
-                                                           LF_CHAR_Buy, LF_CHAR_Open);
-                        doingOrders.insert(oid);
-                    }else if(md->LastPrice < plan->outPrice){
-                        if(strcmp(md->TradingDay, plan->lastInDate) != 0){ // all yesterday or far
-                            KF_LOG_INFO(logger, "will long out all yesterday " << md->LastPrice << " @ " << md->UpdateTime);
+        if(md->AskPrice1 > impossiablePrice || md->BidPrice1 > impossiablePrice || md->OpenPrice > impossiablePrice ){
+            KF_LOG_INFO(logger, "impossiable tick, ignored");
+        }else {
+            if (strcmp(M_TICKER, md->InstrumentID) == 0) { // maybe many kinds
+                if (doingOrders.size() > 0) { // some order is itill doing
+                    KF_LOG_INFO(logger, "[on tick] some order is still doing");
+                    return;
+                } else {
+                    if (plan->direction == LONG_IN) {
+                        if (md->LastPrice > plan->inPrice) {
+                            KF_LOG_INFO(logger, "will long in " << md->LastPrice << " @ " << md->UpdateTime);
                             int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                    md->LowerLimitPrice, plan->todayVolume + plan->yesterdayVolume,
-                                    LF_CHAR_Sell, LF_CHAR_CloseYesterday);
+                                                               md->UpperLimitPrice, 1,
+                                                               LF_CHAR_Buy, LF_CHAR_Open);
                             doingOrders.insert(oid);
-                        }else {// some volume is today
-                            if(plan->todayVolume > 0) {
-                                KF_LOG_INFO(logger, "will long out today " << md->LastPrice << " @ " << md->UpdateTime);
-                                int oidT = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                    md->LowerLimitPrice, plan->todayVolume,
-                                                                    LF_CHAR_Sell, LF_CHAR_CloseToday);
-                                doingOrders.insert(oidT);
-                            }else{
-                                KF_LOG_INFO(logger, "no today volume");
-                            }
-                            if (plan->yesterdayVolume > 0) {
+                        } else if (md->LastPrice < plan->outPrice) {
+                            if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
                                 KF_LOG_INFO(logger,
-                                            "will long out yesterday " << md->LastPrice << " @ " << md->UpdateTime);
-                                int oidY = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                    md->LowerLimitPrice, plan->yesterdayVolume,
-                                                                    LF_CHAR_Sell, LF_CHAR_CloseYesterday);
-                                doingOrders.insert(oidY);
-                            } else {
-                                KF_LOG_INFO(logger, "no yesterday volume");
+                                            "will long out all yesterday " << md->LastPrice << " @ " << md->UpdateTime);
+                                int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                                                   md->LowerLimitPrice,
+                                                                   plan->todayVolume + plan->yesterdayVolume,
+                                                                   LF_CHAR_Sell, LF_CHAR_CloseYesterday);
+                                doingOrders.insert(oid);
+                            } else {// some volume is today
+                                if (plan->todayVolume > 0) {
+                                    KF_LOG_INFO(logger,
+                                                "will long out today " << md->LastPrice << " @ " << md->UpdateTime);
+                                    int oidT = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                                                        md->LowerLimitPrice, plan->todayVolume,
+                                                                        LF_CHAR_Sell, LF_CHAR_CloseToday);
+                                    doingOrders.insert(oidT);
+                                } else {
+                                    KF_LOG_INFO(logger, "no today volume");
+                                }
+                                if (plan->yesterdayVolume > 0) {
+                                    KF_LOG_INFO(logger,
+                                                "will long out yesterday " << md->LastPrice << " @ " << md->UpdateTime);
+                                    int oidY = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                                                        md->LowerLimitPrice, plan->yesterdayVolume,
+                                                                        LF_CHAR_Sell, LF_CHAR_CloseYesterday);
+                                    doingOrders.insert(oidY);
+                                } else {
+                                    KF_LOG_INFO(logger, "no yesterday volume");
+                                }
+                            }
+                        } else { // no in, no out, maybe update out price
+                            double maybeNewOut = md->LastPrice * (1 - plan->lossRate);
+                            if (maybeNewOut > plan->outPrice) {
+                                double lastInPrice = plan->inPrices[plan->inPrices.size() - 1];
+                                KF_LOG_INFO(logger, "[on tick] update long out "
+                                        << plan->outPrice << " --> " << maybeNewOut
+                                        << " => " << maybeNewOut - lastInPrice);
+                                plan->outPrice = maybeNewOut;
                             }
                         }
-                    }else{ // no in, no out, maybe update out price
-                        double maybeNewOut = md->LastPrice * (1 - plan->lossRate);
-                        if(maybeNewOut > plan->outPrice){
-                            KF_LOG_INFO(logger, "[on tick] update long out " << plan->outPrice << " --> " << maybeNewOut);
-                            plan->outPrice = maybeNewOut;
-                        }
-                    }
-                } else if(plan->direction == SHORT_IN){
-                    if(md->LastPrice < plan->inPrice) {
-                        KF_LOG_INFO(logger, "will short in " << md->LastPrice << " @ " << md->UpdateTime);
-                        int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                           md->LowerLimitPrice, 1,
-                                                           LF_CHAR_Sell, LF_CHAR_Open);
-                        doingOrders.insert(oid);
-                    }else if(md->LastPrice > plan->outPrice){
-                        if(strcmp(md->TradingDay, plan->lastInDate) != 0){ // all yesterday or far
-                            KF_LOG_INFO(logger, "will short out all yesterday " << md->LastPrice << " @ " << md->UpdateTime);
+                    } else if (plan->direction == SHORT_IN) {
+                        if (md->LastPrice < plan->inPrice) {
+                            KF_LOG_INFO(logger, "will short in " << md->LastPrice << " @ " << md->UpdateTime);
                             int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                    md->LowerLimitPrice, plan->todayVolume + plan->yesterdayVolume,
-                                    LF_CHAR_Buy, LF_CHAR_CloseYesterday);
+                                                               md->LowerLimitPrice, 1,
+                                                               LF_CHAR_Sell, LF_CHAR_Open);
                             doingOrders.insert(oid);
-                        }else{// some volume is today
-                            if(plan->todayVolume > 0) {
-                                KF_LOG_INFO(logger,
-                                            "will short out today " << md->LastPrice << " @ " << md->UpdateTime);
-                                int oidT = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                    md->LowerLimitPrice, plan->todayVolume,
-                                                                    LF_CHAR_Buy, LF_CHAR_CloseToday);
-                                doingOrders.insert(oidT);
-                            }else{
-                                KF_LOG_INFO(logger, "no today volume");
+                        } else if (md->LastPrice > plan->outPrice) {
+                            if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
+                                KF_LOG_INFO(logger, "will short out all yesterday " << md->LastPrice << " @ "
+                                                                                    << md->UpdateTime);
+                                int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                                                   md->LowerLimitPrice,
+                                                                   plan->todayVolume + plan->yesterdayVolume,
+                                                                   LF_CHAR_Buy, LF_CHAR_CloseYesterday);
+                                doingOrders.insert(oid);
+                            } else {// some volume is today
+                                if (plan->todayVolume > 0) {
+                                    KF_LOG_INFO(logger,
+                                                "will short out today " << md->LastPrice << " @ " << md->UpdateTime);
+                                    int oidT = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                                                        md->LowerLimitPrice, plan->todayVolume,
+                                                                        LF_CHAR_Buy, LF_CHAR_CloseToday);
+                                    doingOrders.insert(oidT);
+                                } else {
+                                    KF_LOG_INFO(logger, "no today volume");
+                                }
+                                if (plan->yesterdayVolume > 0) {
+                                    KF_LOG_INFO(logger,
+                                                "will short out yesterday " << md->LastPrice << " @ "
+                                                                            << md->UpdateTime);
+                                    int oidY = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                                                        md->LowerLimitPrice, plan->yesterdayVolume,
+                                                                        LF_CHAR_Buy, LF_CHAR_CloseYesterday);
+                                    doingOrders.insert(oidY);
+                                } else {
+                                    KF_LOG_INFO(logger, "no yesterday volume");
+                                }
                             }
-                            if(plan->yesterdayVolume > 0) {
-                                KF_LOG_INFO(logger,
-                                            "will short out yesterday " << md->LastPrice << " @ " << md->UpdateTime);
-                                int oidY = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                    md->LowerLimitPrice, plan->yesterdayVolume,
-                                                                    LF_CHAR_Buy, LF_CHAR_CloseYesterday);
-                                doingOrders.insert(oidY);
-                            }else{
-                                KF_LOG_INFO(logger, "no yesterday volume");
+                        } else { // no in, no out, maybe update out price
+                            double maybeNewOut = md->LastPrice * (1 - plan->lossRate);
+                            if (maybeNewOut < plan->outPrice) {
+                                double lastInPrice = plan->inPrices[plan->inPrices.size() - 1];
+                                KF_LOG_INFO(logger, "[on tick] update short out "
+                                        << plan->outPrice << " --> " << maybeNewOut
+                                        << " => " << lastInPrice - maybeNewOut);
+                                plan->outPrice = maybeNewOut;
                             }
                         }
-                    }else{ // no in, no out, maybe update out price
-                        double maybeNewOut = md->LastPrice * (1 - plan->lossRate);
-                        if(maybeNewOut > plan->outPrice){
-                            KF_LOG_INFO(logger, "[on tick] update out " << plan->outPrice << " --> " << maybeNewOut);
-                            plan->outPrice = maybeNewOut;
-                        }
+                    } else {
+                        KF_LOG_FATAL(logger, "[on tick] get plan direction " << plan->direction);
                     }
-                }else{
-                    KF_LOG_FATAL(logger, "[on tick] get plan direction "<< plan->direction);
                 }
             }
         }
@@ -197,6 +212,7 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
     KF_LOG_DEBUG(logger, "[TRADE]" << " (t)" << rtn_trade->InstrumentID << " (p)" << rtn_trade->Price
                                    << " (v)" << rtn_trade->Volume << " POS:" << data->get_pos(source)->to_string());
     if(rtn_trade->OffsetFlag == LF_CHAR_Open){
+        plan->inPrices.push_back(rtn_trade->Price);
         if(strcmp(plan->lastInDate, rtn_trade->TradingDay) == 0){ //same day
             plan->todayVolume += rtn_trade->Volume;
         }else{// not same day
@@ -205,13 +221,13 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
             strcpy(plan->lastInDate, rtn_trade->TradingDay);
         }
         if(rtn_trade->Direction == LF_CHAR_Buy){
-            double newOut = rtn_trade->Price * (1 + plan->profitRate);
-            KF_LOG_INFO(logger, "[blind] update buy in "<< plan->inPrice << "-->" << newOut);
-            plan->inPrice = newOut;
+            double newIn = rtn_trade->Price * (1 + plan->profitRate);
+            KF_LOG_INFO(logger, "[blind] update buy in "<< plan->inPrice << "-->" << newIn);
+            plan->inPrice = newIn;
         }else if (rtn_trade->Direction == LF_CHAR_Sell){
-            double newOut = rtn_trade->Price * (1 - plan->profitRate);
-            KF_LOG_INFO(logger, "[blind] update sell in "<< plan->inPrice << "-->" << newOut);
-            plan->inPrice = newOut;
+            double newIn = rtn_trade->Price * (1 - plan->profitRate);
+            KF_LOG_INFO(logger, "[blind] update sell in "<< plan->inPrice << "-->" << newIn);
+            plan->inPrice = newIn;
         }else{
             KF_LOG_FATAL(logger, "[TRADE] direction " << rtn_trade->OffsetFlag << " complete, dont know what to do");
         }
@@ -233,7 +249,6 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
                 sum += *p - rtn_trade->Price;
             }
             KF_LOG_INFO(logger, "[blind] " << plan->inPrices.size() << " -> " << rtn_trade->Price << " ==>" << sum);
-            plan->resetAsSell();
             plan->resetAsBuy();
         }
     } else {
