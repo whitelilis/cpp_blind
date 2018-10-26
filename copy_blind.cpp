@@ -120,12 +120,12 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                             doingOrders.insert(oid);
                         } else if (md->LastPrice < plan->outPrice) {
                             KF_LOG_INFO(logger, md->LastPrice << " < " << plan->outPrice);
+                            double usePrice = md->LowerLimitPrice;
                             if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
                                 int v = plan->todayVolume + plan->yesterdayVolume;
                                 KF_LOG_INFO(logger, "will long out all yesterday " << v << " @ " << md->UpdateTime);
                                 int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                   md->LowerLimitPrice,
-                                                                   v,
+                                                                   usePrice, v,
                                                                    LF_CHAR_Sell, LF_CHAR_CloseYesterday);
                                 doingOrders.insert(oid);
                             } else {// some volume is today
@@ -133,7 +133,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                     KF_LOG_INFO(logger,
                                                 "will long out today " << md->LastPrice << " @ " << md->UpdateTime);
                                     int oidT = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                        md->LowerLimitPrice, plan->todayVolume,
+                                                                        usePrice, plan->todayVolume,
                                                                         LF_CHAR_Sell, LF_CHAR_CloseToday);
                                     doingOrders.insert(oidT);
                                 } else {
@@ -143,7 +143,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                     KF_LOG_INFO(logger,
                                                 "will long out yesterday " << md->LastPrice << " @ " << md->UpdateTime);
                                     int oidY = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                        md->LowerLimitPrice, plan->yesterdayVolume,
+                                                                        usePrice, plan->yesterdayVolume,
                                                                         LF_CHAR_Sell, LF_CHAR_CloseYesterday);
                                     doingOrders.insert(oidY);
                                 } else {
@@ -169,12 +169,12 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                             doingOrders.insert(oid);
                         } else if (md->LastPrice > plan->outPrice) {
                             KF_LOG_INFO(logger, md->LastPrice << " > " << plan->outPrice);
+                            double usePrice = md->UpperLimitPrice;
                             if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
                                 int v = plan->yesterdayVolume + plan->todayVolume;
                                 KF_LOG_INFO(logger, "will short out all yesterday " << v << " @ " << md->UpdateTime);
                                 int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                   md->LowerLimitPrice,
-                                                                   v,
+                                                                   usePrice, v,
                                                                    LF_CHAR_Buy, LF_CHAR_CloseYesterday);
                                 doingOrders.insert(oid);
                             } else {// some volume is today
@@ -182,7 +182,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                     KF_LOG_INFO(logger,
                                                 "will short out today " << md->LastPrice << " @ " << md->UpdateTime);
                                     int oidT = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                        md->LowerLimitPrice, plan->todayVolume,
+                                                                        usePrice, plan->todayVolume,
                                                                         LF_CHAR_Buy, LF_CHAR_CloseToday);
                                     doingOrders.insert(oidT);
                                 } else {
@@ -193,7 +193,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                                 "will short out yesterday " << md->LastPrice << " @ "
                                                                             << md->UpdateTime);
                                     int oidY = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
-                                                                        md->LowerLimitPrice, plan->yesterdayVolume,
+                                                                        usePrice, plan->yesterdayVolume,
                                                                         LF_CHAR_Buy, LF_CHAR_CloseYesterday);
                                     doingOrders.insert(oidY);
                                 } else {
@@ -201,7 +201,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                 }
                             }
                         } else { // no in, no out, maybe update out price
-                            double maybeNewOut = md->LastPrice * (1 - plan->lossRate);
+                            double maybeNewOut = md->LastPrice * (1 + plan->lossRate);
                             if (maybeNewOut < plan->outPrice) {
                                 double lastInPrice = plan->inPrices[plan->inPrices.size() - 1];
                                 KF_LOG_INFO(logger, "[on tick] update short out "
@@ -283,7 +283,7 @@ void Blind::on_rtn_order(const LFRtnOrderField* data, int request_id, short sour
         KF_LOG_INFO(logger, "[order] "<< request_id << " complete, erase it.");
         doingOrders.erase(request_id);
     }else{
-        KF_LOG_ERROR(logger, " [order] status" << data->OrderStatus << "(order_id)" << request_id << " (source)" << source);
+        KF_LOG_ERROR(logger, " [order] status " << data->OrderStatus << "(order_id)" << request_id << " (source)" << source);
     }
 }
 
