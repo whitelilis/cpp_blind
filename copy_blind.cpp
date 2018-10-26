@@ -37,6 +37,9 @@ public:
 public:
     Blind(const string& name, double lossRate, double times);
     friend void callback_func_blind(Blind *str, int param);
+
+    void on_rsp_order(const LFInputOrderField *data, int request_id, short source, long rcv_time, short errorId,
+                      const char *errorMsg) override;
 };
 
 void callback_func_blind(Blind *str, int param)
@@ -102,7 +105,10 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
         } else {
             if (strcmp(M_TICKER, md->InstrumentID) == 0) { // maybe many kinds
                 if (doingOrders.size() > 0) { // some order is itill doing
-                    KF_LOG_INFO(logger, "[on tick] some order is still doing");
+                    KF_LOG_INFO(logger, "[on tick] some order is still doing ---------------");
+                    for(std::set<int>::iterator i = doingOrders.begin(); i != doingOrders.end(); ++i){
+                        KF_LOG_INFO(logger, "[on tick] order " << *i);
+                    }
                     return;
                 } else {
                     if (plan->direction == LONG_IN) {
@@ -113,12 +119,13 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                                                LF_CHAR_Buy, LF_CHAR_Open);
                             doingOrders.insert(oid);
                         } else if (md->LastPrice < plan->outPrice) {
+                            KF_LOG_INFO(logger, md->LastPrice << " < " << plan->outPrice);
                             if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
-                                KF_LOG_INFO(logger,
-                                            "will long out all yesterday " << md->LastPrice << " @ " << md->UpdateTime);
+                                int v = plan->todayVolume + plan->yesterdayVolume;
+                                KF_LOG_INFO(logger, "will long out all yesterday " << v << " @ " << md->UpdateTime);
                                 int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                    md->LowerLimitPrice,
-                                                                   plan->todayVolume + plan->yesterdayVolume,
+                                                                   v,
                                                                    LF_CHAR_Sell, LF_CHAR_CloseYesterday);
                                 doingOrders.insert(oid);
                             } else {// some volume is today
@@ -161,12 +168,13 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                                                LF_CHAR_Sell, LF_CHAR_Open);
                             doingOrders.insert(oid);
                         } else if (md->LastPrice > plan->outPrice) {
+                            KF_LOG_INFO(logger, md->LastPrice << " > " << plan->outPrice);
                             if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
-                                KF_LOG_INFO(logger, "will short out all yesterday " << md->LastPrice << " @ "
-                                                                                    << md->UpdateTime);
+                                int v = plan->yesterdayVolume + plan->todayVolume;
+                                KF_LOG_INFO(logger, "will short out all yesterday " << v << " @ " << md->UpdateTime);
                                 int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                    md->LowerLimitPrice,
-                                                                   plan->todayVolume + plan->yesterdayVolume,
+                                                                   v,
                                                                    LF_CHAR_Buy, LF_CHAR_CloseYesterday);
                                 doingOrders.insert(oid);
                             } else {// some volume is today
@@ -213,6 +221,12 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
     }
 }
 
+void Blind::on_rsp_order(const LFInputOrderField *data, int request_id, short source, long rcv_time, short errorId,
+                         const char *errorMsg) {
+    KF_LOG_INFO(logger, "[rsp order] (r) " << request_id << " (s) " << source << " (e) " << errorId);
+    IWCStrategy::on_rsp_order(data, request_id, source, rcv_time, errorId, errorMsg);
+}
+
 void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short source, long rcv_time)
 {
     KF_LOG_DEBUG(logger, "[TRADE]" << " (t)" << rtn_trade->InstrumentID << " (p)" << rtn_trade->Price
@@ -228,11 +242,11 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
         }
         if(rtn_trade->Direction == LF_CHAR_Buy){
             double newIn = rtn_trade->Price * (1 + plan->profitRate);
-            KF_LOG_INFO(logger, "[blind] update buy in "<< plan->inPrice << "-->" << newIn);
+            KF_LOG_INFO(logger, "[blind] update next long in "<< plan->inPrice << "-->" << newIn);
             plan->inPrice = newIn;
         }else if (rtn_trade->Direction == LF_CHAR_Sell){
             double newIn = rtn_trade->Price * (1 - plan->profitRate);
-            KF_LOG_INFO(logger, "[blind] update sell in "<< plan->inPrice << "-->" << newIn);
+            KF_LOG_INFO(logger, "[blind] update next short in "<< plan->inPrice << "-->" << newIn);
             plan->inPrice = newIn;
         }else{
             KF_LOG_FATAL(logger, "[TRADE] direction " << rtn_trade->OffsetFlag << " complete, dont know what to do");
@@ -242,7 +256,7 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
     rtn_trade->OffsetFlag == LF_CHAR_CloseToday ||
     rtn_trade->OffsetFlag == LF_CHAR_Close){
         if(rtn_trade->Direction == LF_CHAR_Buy){ // buy close, add buy
-            KF_LOG_INFO(logger, "[blind] over trade, add sell");
+            KF_LOG_INFO(logger, "[blind] over short, add long");
             double sum = 0;
             for(std::vector<double>::iterator p = plan->inPrices.begin(); p != plan->inPrices.end(); p++){
                 sum += rtn_trade->Price - *p;
@@ -250,7 +264,7 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
             KF_LOG_INFO(logger, "[blind] " << plan->inPrices.size() << " -> " << rtn_trade->Price << " ==>" << sum);
             plan->resetAsBuy();
         }else if(rtn_trade->Direction == LF_CHAR_Sell){ // sell close, add sell
-            KF_LOG_INFO(logger, "[blind] over trade, add buy");
+            KF_LOG_INFO(logger, "[blind] over long, add short");
             double sum = 0;
             for(std::vector<double>::iterator p = plan->inPrices.begin(); p != plan->inPrices.end(); p++){
                 sum += *p - rtn_trade->Price;
@@ -266,7 +280,7 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
 void Blind::on_rtn_order(const LFRtnOrderField* data, int request_id, short source, long rcv_time)
 {
     if (data->OrderStatus == LF_CHAR_AllTraded) {
-        KF_LOG_INFO(logger, "[order] "<< request_id << " complete.");
+        KF_LOG_INFO(logger, "[order] "<< request_id << " complete, erase it.");
         doingOrders.erase(request_id);
     }else{
         KF_LOG_ERROR(logger, " [order] status" << data->OrderStatus << "(order_id)" << request_id << " (source)" << source);
