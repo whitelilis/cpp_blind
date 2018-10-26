@@ -42,6 +42,6 @@ LINK_DIRECTORIES(/opt/kungfu/master/lib/yijinjing)
 LINK_DIRECTORIES(/opt/kungfu/master/lib/wingchun)
 
 ############################################################
-SET(STRATEGY_SOURCE_FILE copy_blind.cpp Plan.cpp Plan.h Signal.h WizardUtil.cpp WizardUtil.h TimeSegment.cpp TimeSegment.h)
+SET(STRATEGY_SOURCE_FILE copy_blind.cpp Plan.cpp Plan.h Signal.h WizardUtil.cpp WizardUtil.h TimeSegment.cpp TimeSegment.h FileNpc.cpp FileNpc.h Npc.h)
 ADD_EXECUTABLE(${PROJECT_NAME} ${STRATEGY_SOURCE_FILE})
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} wingchunstrategy python journal kflog log4cplus ${Boost_LIBRARIES})

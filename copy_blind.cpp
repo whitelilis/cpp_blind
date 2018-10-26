@@ -12,11 +12,18 @@
 #include <iostream>
 #include "time.h"
 #include "WizardUtil.h"
+#include "FileNpc.h"
+
+
+#include <boost/program_options.hpp>
+#include <boost/exception/diagnostic_information.hpp>
+
 
 USING_WC_NAMESPACE
+USING_YJJ_NAMESPACE
 
 #define SOURCE_INDEX SOURCE_CTP
-#define M_TICKER "rb1901"
+#define M_TICKER "rb1710"
 #define M_EXCHANGE EXCHANGE_SHFE
 
 class Blind: public IWCStrategy
@@ -27,15 +34,18 @@ protected:
     std::set<int> doingOrders;
     double impossiablePrice = 1e100;
     WizardUtil wizardUtil;
+    Npc* fakeUtil;
 public:
     virtual void init();
     virtual void on_market_data(const LFMarketDataField* data, short source, long rcv_time);
     virtual void on_rsp_position(const PosHandlerPtr posMap, int request_id, short source, long rcv_time);
     virtual void on_rtn_trade(const LFRtnTradeField* data, int request_id, short source, long rcv_time);
     virtual void on_rtn_order(const LFRtnOrderField* data, int request_id, short source, long rcv_time);
+    virtual int limit_order(short source, string instrument_id, string exchange_id, double price, int volume,
+                                    LfDirectionType direction, LfOffsetFlagType offset);
 
 public:
-    Blind(const string& name, double lossRate, double times);
+    Blind(const string& name, double lossRate, double times, Npc * util = NULL);
     friend void callback_func_blind(Blind *str, int param);
 
     void on_rsp_order(const LFInputOrderField *data, int request_id, short source, long rcv_time, short errorId,
@@ -48,8 +58,21 @@ void callback_func_blind(Blind *str, int param)
     KF_LOG_INFO(str->logger, "ready to start! test for param: " << param);
 }
 
-Blind::Blind(const string& name, double lossRate, double times): IWCStrategy(name)
+int Blind::limit_order(short source, string instrument_id, string exchange_id, double price, int volume,
+                LfDirectionType direction, LfOffsetFlagType offset){
+    if(fakeUtil == NULL){
+        return util->insert_limit_order(source, instrument_id, exchange_id, price, volume, direction, offset);
+    } else {
+        return fakeUtil->fake_limit_order(source, instrument_id, exchange_id, price, volume, direction, offset);
+    }
+}
+
+Blind::Blind(const string& name, double lossRate, double times, Npc * util): IWCStrategy(name)
 {
+    if(util != nullptr){ // for back testing
+        memcpy(&this->fakeUtil, &util, sizeof(Npc));
+        td_connected = true;
+    }
     srand(time(0));
     int r = rand();
     double profitRate = lossRate * times;
@@ -114,7 +137,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                     if (plan->direction == LONG_IN) {
                         if (md->LastPrice > plan->inPrice) {
                             KF_LOG_INFO(logger, "will long in " << md->LastPrice << " @ " << md->UpdateTime);
-                            int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                            int oid = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                md->UpperLimitPrice, 1,
                                                                LF_CHAR_Buy, LF_CHAR_Open);
                             doingOrders.insert(oid);
@@ -124,7 +147,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                             if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
                                 int v = plan->todayVolume + plan->yesterdayVolume;
                                 KF_LOG_INFO(logger, "will long out all yesterday " << v << " @ " << md->UpdateTime);
-                                int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                int oid = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                    usePrice, v,
                                                                    LF_CHAR_Sell, LF_CHAR_CloseYesterday);
                                 doingOrders.insert(oid);
@@ -132,7 +155,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                 if (plan->todayVolume > 0) {
                                     KF_LOG_INFO(logger,
                                                 "will long out today " << md->LastPrice << " @ " << md->UpdateTime);
-                                    int oidT = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                    int oidT = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                         usePrice, plan->todayVolume,
                                                                         LF_CHAR_Sell, LF_CHAR_CloseToday);
                                     doingOrders.insert(oidT);
@@ -142,7 +165,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                 if (plan->yesterdayVolume > 0) {
                                     KF_LOG_INFO(logger,
                                                 "will long out yesterday " << md->LastPrice << " @ " << md->UpdateTime);
-                                    int oidY = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                    int oidY = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                         usePrice, plan->yesterdayVolume,
                                                                         LF_CHAR_Sell, LF_CHAR_CloseYesterday);
                                     doingOrders.insert(oidY);
@@ -163,7 +186,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                     } else if (plan->direction == SHORT_IN) {
                         if (md->LastPrice < plan->inPrice) {
                             KF_LOG_INFO(logger, "will short in " << md->LastPrice << " @ " << md->UpdateTime);
-                            int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                            int oid = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                md->LowerLimitPrice, 1,
                                                                LF_CHAR_Sell, LF_CHAR_Open);
                             doingOrders.insert(oid);
@@ -173,7 +196,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                             if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
                                 int v = plan->yesterdayVolume + plan->todayVolume;
                                 KF_LOG_INFO(logger, "will short out all yesterday " << v << " @ " << md->UpdateTime);
-                                int oid = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                int oid = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                    usePrice, v,
                                                                    LF_CHAR_Buy, LF_CHAR_CloseYesterday);
                                 doingOrders.insert(oid);
@@ -181,7 +204,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                 if (plan->todayVolume > 0) {
                                     KF_LOG_INFO(logger,
                                                 "will short out today " << md->LastPrice << " @ " << md->UpdateTime);
-                                    int oidT = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                    int oidT = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                         usePrice, plan->todayVolume,
                                                                         LF_CHAR_Buy, LF_CHAR_CloseToday);
                                     doingOrders.insert(oidT);
@@ -192,7 +215,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                     KF_LOG_INFO(logger,
                                                 "will short out yesterday " << md->LastPrice << " @ "
                                                                             << md->UpdateTime);
-                                    int oidY = util->insert_limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                    int oidY = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
                                                                         usePrice, plan->yesterdayVolume,
                                                                         LF_CHAR_Buy, LF_CHAR_CloseYesterday);
                                     doingOrders.insert(oidY);
@@ -289,17 +312,47 @@ void Blind::on_rtn_order(const LFRtnOrderField* data, int request_id, short sour
 
 int main(int argc, const char* argv[])
 {
-    double lossRate = 0.007;
-    double times = 4;
-    if(argc >= 3){
-        std::istringstream iss(argv[1]);
-        iss>>lossRate;
-        std::istringstream iss2(argv[2]);
-        iss2>>times;
+    double lossRate;
+    double times;
+    std::string filePath;
+
+    boost::program_options::options_description desc("Options");
+
+    desc.add_options()
+            ("help,h", "produce help message")
+            ("loss,l", boost::program_options::value<double>(&lossRate)->default_value(0.007), "set loss rate")
+            ("times,t", boost::program_options::value<double>(&times)->default_value(4), "set p/l times")
+            ("file,f", boost::program_options::value<std::string>(&filePath)->default_value(""), "back test file");
+
+    boost::program_options::variables_map vm;
+    try {
+        boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
+        boost::program_options::notify(vm);
     }
-    Blind str(string("copy_blind"), lossRate, times);
-    str.init();
-    str.start();
-    str.block();
-    return 0;
+    catch (boost::exception& e) {
+        std::cerr << boost::diagnostic_information(e) << std::endl;
+        return 1;
+    }
+
+    if (vm.count("help"))
+    {
+        std::cout << desc << std::endl;
+        return 1;
+    } else {
+
+        if (filePath.size() == 0) {
+            Blind str(string("copy_blind"), lossRate, times);
+            str.init();
+            str.start();
+            str.block();
+            return 0;
+        } else {
+            FileNpc * inner = new FileNpc(filePath.data());
+            Blind str(string("copy_blind"), lossRate, times, inner);
+            inner->setStrategy(&str);
+            inner->run();
+            delete inner;
+            return 0;
+        }
+    }
 }
