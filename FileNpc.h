@@ -5,8 +5,8 @@
 #ifndef COPY_BLIND_FILENPC_H
 #define COPY_BLIND_FILENPC_H
 
-#include <fstream>
 #include "Npc.h"
+#include <fstream>
 
 USING_WC_NAMESPACE
 USING_YJJ_NAMESPACE

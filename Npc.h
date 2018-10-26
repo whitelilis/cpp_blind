@@ -5,11 +5,10 @@
 #ifndef COPY_BLIND_NPC_H
 #define COPY_BLIND_NPC_H
 
-#include <fstream>
 #include "IWCStrategy.h"
+#include <fstream>
 
 USING_WC_NAMESPACE
-USING_YJJ_NAMESPACE
 
 class Npc{
 public:
