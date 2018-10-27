@@ -122,9 +122,9 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
         if(md->AskPrice1 > impossiablePrice ||
         md->BidPrice1 > impossiablePrice ||
         md->OpenPrice > impossiablePrice){
-            KF_LOG_INFO(logger, "impossiable tick price, ignored");
+            KF_LOG_INFO(logger, "impossiable tick price (a/b/o) " << md->AskPrice1 << "/" << md->BidPrice1 << "/" << md->OpenPrice << " ignored");
         } else if( ! wizardUtil.tickValidate(md)){
-            KF_LOG_INFO(logger, "impossiable tick time, ignored");
+            KF_LOG_INFO(logger, "impossiable tick time, ignored (u) " << md->UpdateTime);
         } else {
             if (strcmp(M_TICKER, md->InstrumentID) == 0) { // maybe many kinds
                 if (doingOrders.size() > 0) { // some order is itill doing
