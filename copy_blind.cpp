@@ -23,8 +23,7 @@ USING_WC_NAMESPACE
 USING_YJJ_NAMESPACE
 
 #define SOURCE_INDEX SOURCE_CTP
-#define M_TICKER "rb1710"
-#define M_EXCHANGE EXCHANGE_SHFE
+// todo : read from command line exchange
 
 class Blind: public IWCStrategy
 {
@@ -35,6 +34,7 @@ protected:
     double impossiablePrice = 1e100;
     WizardUtil wizardUtil;
     Npc* fakeUtil;
+    char_31 ticker;
 public:
     virtual void init();
     virtual void on_market_data(const LFMarketDataField* data, short source, long rcv_time);
@@ -45,7 +45,8 @@ public:
                                     LfDirectionType direction, LfOffsetFlagType offset);
 
 public:
-    Blind(const string& name, double lossRate, double times, Npc * util = NULL);
+    // todo : support tick list
+    Blind(const string& name, double lossRate, double times, std::string ticker, Npc * util = NULL);
     friend void callback_func_blind(Blind *str, int param);
 
     void on_rsp_order(const LFInputOrderField *data, int request_id, short source, long rcv_time, short errorId,
@@ -67,12 +68,13 @@ int Blind::limit_order(short source, string instrument_id, string exchange_id, d
     }
 }
 
-Blind::Blind(const string& name, double lossRate, double times, Npc * util): IWCStrategy(name)
+Blind::Blind(const string& name, double lossRate, double times, std::string ticker, Npc * util): IWCStrategy(name)
 {
     if(util != nullptr){ // for back testing
         memcpy(&this->fakeUtil, &util, sizeof(Npc));
         td_connected = true;
     }
+    strcpy(this->ticker, ticker.data());
     srand(time(0));
     int r = rand();
     double profitRate = lossRate * times;
@@ -92,7 +94,7 @@ void Blind::init()
     data->add_market_data(SOURCE_INDEX);
     data->add_register_td(SOURCE_INDEX);
     vector<string> tickers;
-    tickers.push_back(M_TICKER);
+    tickers.push_back(ticker);
     util->subscribeMarketData(tickers, SOURCE_INDEX);
     // necessary initialization of internal fields.
     td_connected = false;
@@ -126,7 +128,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
         } else if( ! wizardUtil.tickValidate(md)){
             KF_LOG_INFO(logger, "impossiable tick time, ignored (u) " << md->UpdateTime);
         } else {
-            if (strcmp(M_TICKER, md->InstrumentID) == 0) { // maybe many kinds
+            if (strcmp(ticker, md->InstrumentID) == 0) { // maybe many kinds
                 if (doingOrders.size() > 0) { // some order is itill doing
                     KF_LOG_INFO(logger, "[on tick] some order is still doing ---------------");
                     for(std::set<int>::iterator i = doingOrders.begin(); i != doingOrders.end(); ++i){
@@ -137,7 +139,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                     if (plan->direction == LONG_IN) {
                         if (md->LastPrice > plan->inPrice) {
                             KF_LOG_INFO(logger, "will long in " << md->LastPrice << " @ " << md->UpdateTime);
-                            int oid = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                            int oid = limit_order(SOURCE_INDEX, md->InstrumentID, md->ExchangeID,
                                                                md->UpperLimitPrice, 1,
                                                                LF_CHAR_Buy, LF_CHAR_Open);
                             doingOrders.insert(oid);
@@ -147,7 +149,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                             if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
                                 int v = plan->todayVolume + plan->yesterdayVolume;
                                 KF_LOG_INFO(logger, "will long out all yesterday " << v << " @ " << md->UpdateTime);
-                                int oid = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                int oid = limit_order(SOURCE_INDEX, md->InstrumentID, md->ExchangeID,
                                                                    usePrice, v,
                                                                    LF_CHAR_Sell, LF_CHAR_CloseYesterday);
                                 doingOrders.insert(oid);
@@ -155,7 +157,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                 if (plan->todayVolume > 0) {
                                     KF_LOG_INFO(logger,
                                                 "will long out today " << md->LastPrice << " @ " << md->UpdateTime);
-                                    int oidT = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                    int oidT = limit_order(SOURCE_INDEX, md->InstrumentID, md->ExchangeID,
                                                                         usePrice, plan->todayVolume,
                                                                         LF_CHAR_Sell, LF_CHAR_CloseToday);
                                     doingOrders.insert(oidT);
@@ -165,7 +167,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                 if (plan->yesterdayVolume > 0) {
                                     KF_LOG_INFO(logger,
                                                 "will long out yesterday " << md->LastPrice << " @ " << md->UpdateTime);
-                                    int oidY = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                    int oidY = limit_order(SOURCE_INDEX, md->InstrumentID, md->ExchangeID,
                                                                         usePrice, plan->yesterdayVolume,
                                                                         LF_CHAR_Sell, LF_CHAR_CloseYesterday);
                                     doingOrders.insert(oidY);
@@ -186,7 +188,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                     } else if (plan->direction == SHORT_IN) {
                         if (md->LastPrice < plan->inPrice) {
                             KF_LOG_INFO(logger, "will short in " << md->LastPrice << " @ " << md->UpdateTime);
-                            int oid = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                            int oid = limit_order(SOURCE_INDEX, md->InstrumentID, md->ExchangeID,
                                                                md->LowerLimitPrice, 1,
                                                                LF_CHAR_Sell, LF_CHAR_Open);
                             doingOrders.insert(oid);
@@ -196,7 +198,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                             if (strcmp(md->TradingDay, plan->lastInDate) != 0) { // all yesterday or far
                                 int v = plan->yesterdayVolume + plan->todayVolume;
                                 KF_LOG_INFO(logger, "will short out all yesterday " << v << " @ " << md->UpdateTime);
-                                int oid = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                int oid = limit_order(SOURCE_INDEX, md->InstrumentID, md->ExchangeID,
                                                                    usePrice, v,
                                                                    LF_CHAR_Buy, LF_CHAR_CloseYesterday);
                                 doingOrders.insert(oid);
@@ -204,7 +206,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                 if (plan->todayVolume > 0) {
                                     KF_LOG_INFO(logger,
                                                 "will short out today " << md->LastPrice << " @ " << md->UpdateTime);
-                                    int oidT = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                    int oidT = limit_order(SOURCE_INDEX, md->InstrumentID, md->ExchangeID,
                                                                         usePrice, plan->todayVolume,
                                                                         LF_CHAR_Buy, LF_CHAR_CloseToday);
                                     doingOrders.insert(oidT);
@@ -215,7 +217,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
                                     KF_LOG_INFO(logger,
                                                 "will short out yesterday " << md->LastPrice << " @ "
                                                                             << md->UpdateTime);
-                                    int oidY = limit_order(SOURCE_INDEX, M_TICKER, M_EXCHANGE,
+                                    int oidY = limit_order(SOURCE_INDEX, md->InstrumentID, md->ExchangeID,
                                                                         usePrice, plan->yesterdayVolume,
                                                                         LF_CHAR_Buy, LF_CHAR_CloseYesterday);
                                     doingOrders.insert(oidY);
@@ -315,6 +317,7 @@ int main(int argc, const char* argv[])
     double lossRate;
     double times;
     std::string filePath;
+    std::string ticker;
 
     boost::program_options::options_description desc("Options");
 
@@ -322,6 +325,7 @@ int main(int argc, const char* argv[])
             ("help,h", "produce help message")
             ("loss,l", boost::program_options::value<double>(&lossRate)->default_value(0.007), "set loss rate")
             ("times,t", boost::program_options::value<double>(&times)->default_value(4), "set p/l times")
+            ("tickers,k", boost::program_options::value<std::string>(&ticker)->default_value("rb1710"), "set tickers")
             ("file,f", boost::program_options::value<std::string>(&filePath)->default_value(""), "back test file");
 
     boost::program_options::variables_map vm;
@@ -341,14 +345,14 @@ int main(int argc, const char* argv[])
     } else {
 
         if (filePath.size() == 0) {
-            Blind str(string("copy_blind"), lossRate, times);
+            Blind str(string("copy_blind"), lossRate, times, ticker);
             str.init();
             str.start();
             str.block();
             return 0;
         } else {
             FileNpc * inner = new FileNpc(filePath.data());
-            Blind str(string("copy_blind"), lossRate, times, inner);
+            Blind str(string("copy_blind"), lossRate, times, ticker, inner);
             inner->setStrategy(&str);
             inner->run();
             delete inner;
