@@ -33,7 +33,7 @@ protected:
     std::set<int> doingOrders;
     double impossiablePrice = 1e100;
     WizardUtil wizardUtil;
-    Npc* fakeUtil;
+    Npc* fakeUtil = NULL;
     char_31 ticker;
 public:
     virtual void init();
