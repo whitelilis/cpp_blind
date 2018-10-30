@@ -318,6 +318,7 @@ int main(int argc, const char* argv[])
     double times;
     std::string filePath;
     std::string ticker;
+    std::string name;
 
     boost::program_options::options_description desc("Options");
 
@@ -326,6 +327,7 @@ int main(int argc, const char* argv[])
             ("loss,l", boost::program_options::value<double>(&lossRate)->default_value(0.007), "set loss rate")
             ("times,t", boost::program_options::value<double>(&times)->default_value(4), "set p/l times")
             ("tickers,k", boost::program_options::value<std::string>(&ticker)->default_value("rb1710"), "set tickers")
+            ("name,n", boost::program_options::value<std::string>(&name)->default_value("blind"), "set strategy name")
             ("file,f", boost::program_options::value<std::string>(&filePath)->default_value(""), "back test file");
 
     boost::program_options::variables_map vm;
@@ -345,14 +347,14 @@ int main(int argc, const char* argv[])
     } else {
 
         if (filePath.size() == 0) {
-            Blind str(string("copy_blind"), lossRate, times, ticker);
+            Blind str(name, lossRate, times, ticker);
             str.init();
             str.start();
             str.block();
             return 0;
         } else {
             FileNpc * inner = new FileNpc(filePath.data());
-            Blind str(string("copy_blind"), lossRate, times, ticker, inner);
+            Blind str(name, lossRate, times, ticker, inner);
             inner->setStrategy(&str);
             inner->run();
             delete inner;
