@@ -284,7 +284,7 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
             KF_LOG_INFO(logger, "[blind] over short, add long");
             double sum = 0;
             for(std::vector<double>::iterator p = plan->inPrices.begin(); p != plan->inPrices.end(); p++){
-                sum += rtn_trade->Price - *p;
+                sum += *p - rtn_trade->Price;
             }
             KF_LOG_INFO(logger, "[blind] " << plan->inPrices.size() << " -> " << rtn_trade->Price << " ==>" << sum);
             plan->resetAsBuy();
@@ -292,7 +292,7 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
             KF_LOG_INFO(logger, "[blind] over long, add short");
             double sum = 0;
             for(std::vector<double>::iterator p = plan->inPrices.begin(); p != plan->inPrices.end(); p++){
-                sum += *p - rtn_trade->Price;
+                sum += rtn_trade->Price - *p;
             }
             KF_LOG_INFO(logger, "[blind] " << plan->inPrices.size() << " -> " << rtn_trade->Price << " ==>" << sum);
             plan->resetAsSell();
