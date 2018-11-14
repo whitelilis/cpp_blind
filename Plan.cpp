@@ -4,8 +4,10 @@
 
 #include "Plan.h"
 
-Plan::Plan(char_64 name, double lossRate, double profitRate):lossRate(lossRate), profitRate(profitRate) {
-    strcpy(this->name, name);
+Plan::Plan(char_64 _name, double _lossRate, double _profitRate){
+    strcpy(this->name, _name);
+    this->lossRate = _lossRate;
+    this->profitRate = _profitRate;
 }
 
 void Plan::resetAsBuy() {

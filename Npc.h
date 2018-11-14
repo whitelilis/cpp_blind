@@ -5,8 +5,7 @@
 #ifndef COPY_BLIND_NPC_H
 #define COPY_BLIND_NPC_H
 
-#include "IWCStrategy.h"
-#include <fstream>
+#include "Other.h"
 
 USING_WC_NAMESPACE
 

@@ -9,4 +9,4 @@ bool TimeSegment::isIn(int hour, int minute) {
     return aim >= start && aim <= end;
 }
 
-TimeSegment::TimeSegment(int start, int end) : start(start), end(end) {}
+TimeSegment::TimeSegment(int _start, int _end) : start(_start), end(_end) {}

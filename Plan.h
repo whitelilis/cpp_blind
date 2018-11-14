@@ -6,13 +6,8 @@
 #define COPY_BLIND_PLAN_H
 
 
-#include <vector>
-#include <longfist/LFDataStruct.h>
+#include "Other.h"
 #include "Signal.h"
-#include <fstream>
-#include <iostream>
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
 
 class Plan {
 

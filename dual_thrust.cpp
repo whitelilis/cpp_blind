@@ -4,20 +4,11 @@
  * @since   Nov, 2017
  */
 
-#include "IWCStrategy.h"
+#include "Other.h"
 #include "Timer.h"
 #include "Plan.h"
-#include <deque>
-#include <set>
-#include <iostream>
-#include "time.h"
 #include "WizardUtil.h"
 #include "FileNpc.h"
-
-
-#include <boost/program_options.hpp>
-#include <boost/exception/diagnostic_information.hpp>
-
 
 USING_WC_NAMESPACE
 USING_YJJ_NAMESPACE
@@ -40,13 +31,13 @@ public:
     virtual void on_market_data(const LFMarketDataField* data, short source, long rcv_time);
     virtual void on_rsp_position(const PosHandlerPtr posMap, int request_id, short source, long rcv_time);
     virtual void on_rtn_trade(const LFRtnTradeField* data, int request_id, short source, long rcv_time);
-    virtual void on_rtn_order(const LFRtnOrderField* data, int request_id, short source, long rcv_time);
+    virtual void on_rtn_order(const LFRtnOrderField* data, int _request_id, short source, long rcv_time);
     virtual int limit_order(short source, string instrument_id, string exchange_id, double price, int volume,
                                     LfDirectionType direction, LfOffsetFlagType offset);
 
 public:
     // todo : support tick list
-    Blind(const string& name, double lossRate, double times, std::string ticker, Npc * util = NULL);
+    Blind(const string& name, double lossRate, double times, std::string ticker, Npc * npc = NULL);
     friend void callback_func_blind(Blind *str, int param);
 
     void on_rsp_order(const LFInputOrderField *data, int request_id, short source, long rcv_time, short errorId,
@@ -68,20 +59,20 @@ int Blind::limit_order(short source, string instrument_id, string exchange_id, d
     }
 }
 
-Blind::Blind(const string& name, double lossRate, double times, std::string ticker, Npc * util): IWCStrategy(name)
+Blind::Blind(const string& _name, double _lossRate, double _times, std::string _ticker, Npc * npc): IWCStrategy(_name)
 {
-    if(util != nullptr){ // for back testing
-        memcpy(&this->fakeUtil, &util, sizeof(Npc));
+    if(npc != nullptr){ // for back testing
+        memcpy(&this->fakeUtil, &npc, sizeof(Npc));
         td_connected = true;
     }
-    strcpy(this->ticker, ticker.data());
+    strcpy(this->ticker, _ticker.data());
     srand(time(0));
     int r = rand();
-    double profitRate = lossRate * times;
+    double profitRate = _lossRate * _times;
     // todo : reload saved
-    KF_LOG_INFO(logger, "rand :"<< r << " lossRate: " << lossRate << " times: " << times);
+    KF_LOG_INFO(logger, "rand :"<< r << " lossRate: " << _lossRate << " times: " << _times);
     char_64 planName = "needAName";
-    plan = new Plan(planName, lossRate, profitRate);
+    plan = new Plan(planName, _lossRate, profitRate);
     if(r % 2 == 0){
         plan->resetAsBuy();
     }else{
@@ -115,7 +106,7 @@ void Blind::on_rsp_position(const PosHandlerPtr posMap, int request_id, short so
     }
     else
     {
-        KF_LOG_DEBUG(logger, "[RSP_POS] " << posMap->to_string());
+        KF_LOG_DEBUG(logger, "[RSP_POS] " << posMap->to_string() << " " << rcv_time);
     }
 }
 
@@ -126,7 +117,7 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
         md->OpenPrice > impossiablePrice){
             KF_LOG_INFO(logger, "impossiable tick price (a/b/o) " << md->AskPrice1 << "/" << md->BidPrice1 << "/" << md->OpenPrice << " ignored");
         } else if( ! wizardUtil.tickValidate(md)){
-            KF_LOG_INFO(logger, "impossiable tick time, ignored (u) " << md->UpdateTime);
+            KF_LOG_INFO(logger, "impossiable tick time, ignored (u) " << md->UpdateTime << " @ " << source << " @ " << rcv_time);
         } else {
             if (strcmp(ticker, md->InstrumentID) == 0) { // maybe many kinds
                 if (doingOrders.size() > 0) { // some order is itill doing
@@ -246,16 +237,17 @@ void Blind::on_market_data(const LFMarketDataField* md, short source, long rcv_t
     }
 }
 
-void Blind::on_rsp_order(const LFInputOrderField *data, int request_id, short source, long rcv_time, short errorId,
+void Blind::on_rsp_order(const LFInputOrderField * _data, int request_id, short source, long rcv_time, short errorId,
                          const char *errorMsg) {
     KF_LOG_INFO(logger, "[rsp order] (r) " << request_id << " (s) " << source << " (e) " << errorId);
-    IWCStrategy::on_rsp_order(data, request_id, source, rcv_time, errorId, errorMsg);
+    IWCStrategy::on_rsp_order(_data, request_id, source, rcv_time, errorId, errorMsg);
 }
 
 void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short source, long rcv_time)
 {
     KF_LOG_DEBUG(logger, "[TRADE]" << " (t)" << rtn_trade->InstrumentID << " (p)" << rtn_trade->Price
-                                   << " (v)" << rtn_trade->Volume << " POS:" << data->get_pos(source)->to_string());
+                                   << " (v)" << rtn_trade->Volume << " POS:" << data->get_pos(source)->to_string()
+                                   << " (r)" << request_id << " @ " << rcv_time);
     if(rtn_trade->OffsetFlag == LF_CHAR_Open){
         plan->inPrices.push_back(rtn_trade->Price);
         if(strcmp(plan->lastInDate, rtn_trade->TradingDay) == 0){ //same day
@@ -302,13 +294,14 @@ void Blind::on_rtn_trade(const LFRtnTradeField* rtn_trade, int request_id, short
     }
 }
 
-void Blind::on_rtn_order(const LFRtnOrderField* data, int request_id, short source, long rcv_time)
+void Blind::on_rtn_order(const LFRtnOrderField* _data, int _request_id, short source, long rcv_time)
 {
-    if (data->OrderStatus == LF_CHAR_AllTraded) {
-        KF_LOG_INFO(logger, "[order] "<< request_id << " complete, erase it.");
-        doingOrders.erase(request_id);
+    if (_data->OrderStatus == LF_CHAR_AllTraded) {
+        KF_LOG_INFO(logger, "[order] "<< _request_id << " complete, erase it.");
+        doingOrders.erase(_request_id);
     }else{
-        KF_LOG_ERROR(logger, " [order] status " << data->OrderStatus << "(order_id)" << request_id << " (source)" << source);
+        KF_LOG_ERROR(logger, " [order] status " << _data->OrderStatus << "(order_id)" << _request_id
+        << " (source)" << source << " @ " << rcv_time);
     }
 }
 
@@ -357,7 +350,7 @@ int main(int argc, const char* argv[])
             Blind str(name, lossRate, times, ticker, inner);
             inner->setStrategy(&str);
             inner->run();
-            delete inner;
+            //delete inner;
             return 0;
         }
     }

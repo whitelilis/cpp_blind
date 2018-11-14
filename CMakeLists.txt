@@ -32,7 +32,8 @@ FIND_PACKAGE(PythonInterp)
 FIND_PACKAGE(PythonLibs)
 INCLUDE_DIRECTORIES(${PYTHON_INCLUDE_PATH})
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -Wall -Werror -Wextra  -Wstrict-aliasing -pedantic -fmax-errors=5 -Wunreachable-code -Wcast-align -Wcast-qual -Wctor-dtor-privacy -Wdisabled-optimization -Wformat=2 -Winit-self -Wlogical-op -Wmissing-include-dirs -Wnoexcept -Wold-style-cast -Woverloaded-virtual -Wredundant-decls -Wshadow -Wstrict-null-sentinel -Wstrict-overflow=5 -Wswitch-default -Wundef -Wno-unused -Wno-variadic-macros -Wno-parentheses -fdiagnostics-show-option ")
+
 OPTION(BUILD_SHARED_LIBS "turn OFF for .a libs" ON)
 
 ############################################################
@@ -42,6 +43,6 @@ LINK_DIRECTORIES(/opt/kungfu/master/lib/yijinjing)
 LINK_DIRECTORIES(/opt/kungfu/master/lib/wingchun)
 
 ############################################################
-SET(STRATEGY_SOURCE_FILE copy_blind.cpp Plan.cpp Plan.h Signal.h WizardUtil.cpp WizardUtil.h TimeSegment.cpp TimeSegment.h FileNpc.cpp FileNpc.h Npc.h)
+SET(STRATEGY_SOURCE_FILE dual_thrust.cpp Plan.cpp Plan.h Signal.h WizardUtil.cpp WizardUtil.h TimeSegment.cpp TimeSegment.h FileNpc.cpp FileNpc.h Npc.h Other.h)
 ADD_EXECUTABLE(${PROJECT_NAME} ${STRATEGY_SOURCE_FILE})
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} wingchunstrategy python journal kflog log4cplus ${Boost_LIBRARIES})

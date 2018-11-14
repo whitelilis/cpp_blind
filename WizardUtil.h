@@ -6,8 +6,7 @@
 #define COPY_BLIND_WIZARDUTIL_H
 
 
-#include <longfist/LFDataStruct.h>
-#include <vector>
+#include "Other.h"
 #include "TimeSegment.h"
 
 class WizardUtil {

@@ -3,7 +3,7 @@
 //
 
 #include "FileNpc.h"
-#include "stdio.h"
+#include "Other.h"
 
 USING_YJJ_NAMESPACE
 
@@ -12,8 +12,8 @@ FileNpc::FileNpc(const char *filePath) {
     assert(fd.is_open());
 }
 
-void FileNpc::setStrategy(IWCStrategy *strategy) {
-    this->strategy = strategy;
+void FileNpc::setStrategy(IWCStrategy * _strategy) {
+    this->strategy = _strategy;
 }
 
 
@@ -80,6 +80,10 @@ void FileNpc::run() {
 int FileNpc::fake_limit_order(short source, string instrument_id, string exchange_id, double price, int volume,
                               LfDirectionType direction, LfOffsetFlagType offset) {
     orderCounter++;
+
+    if(source < 0 || price < 0){
+        std::cerr<<"source or price < 0"<<std::endl;
+    }
 
     LFRtnOrderField orderField;
     strcpy(orderField.InstrumentID, instrument_id.data());

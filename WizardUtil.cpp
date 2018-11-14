@@ -2,11 +2,8 @@
 // Created by liuzhe on 2018-10-25.
 //
 
-#include <iostream>
+#include "Other.h"
 #include "WizardUtil.h"
-#include <string>
-#include <sstream>
-#include <vector>
 #include "TimeSegment.h"
 
 
@@ -24,7 +21,8 @@ WizardUtil::WizardUtil() {
 
 
 bool WizardUtil::tickDayValidate(const LFMarketDataField* md){
-    return true;
+    // todo: using another one
+    return md->LastPrice > 0;
 }
 
 bool WizardUtil::tickTimeValidate(const LFMarketDataField* md){
